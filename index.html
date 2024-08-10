@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        #maze {
+            display: grid;
+            grid-template-columns: repeat(15, 30px);
+            grid-template-rows: repeat(15, 30px);
+            gap: 2px;
+            border: 2px solid #000;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+
+        .wall {
+            background-color: #000;
+        }
+
+        .start {
+            background-color: green;
+        }
+
+        .end {
+            background-color: red;
+        }
+
+        .player {
+            background-color: blue;
+        }
+
+        .enemy {
+            background-color: orange;
+        }
+
+        #timer {
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Maze Game</h1>
+    <div id="timer">Time Left: 60</div>
+    <div id="maze"></div>
+
+    <script>
+        const WIDTH = 15;
+        const HEIGHT = 15;
+        const mazeLayout = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(1));
+        const startPosition = { x: 1, y: 1 };
+        const endPosition = { x: WIDTH - 2, y: HEIGHT - 2 };
+        let playerPosition = { ...startPosition };
+        let enemies = [
+            { x: 4, y: 5 },
+            { x: 6, y: 2 },
+            { x: 7, y: 6 },
+            { x: 10, y: 10 }
+        ];
+
+        // BFS 알고리즘을 사용하여 도착 가능성 확인
+        function isReachable(start, end) {
+            const directions = [
+                { dx: 0, dy: 1 },
+                { dx: 1, dy: 0 },
+                { dx: 0, dy: -1 },
+                { dx: -1, dy: 0 }
+            ];
+            const queue = [start];
+            const visited = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(false));
+            visited[start.y][start.x] = true;
+
+            while (queue.length > 0) {
+                const { x, y } = queue.shift();
+
+                if (x === end.x && y === end.y) {
+                    return true;
+                }
+
+                for (const { dx, dy } of directions) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+
+                    if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT && !visited[ny][nx] && mazeLayout[ny][nx] === 0) {
+                        visited[ny][nx] = true;
+                        queue.push({ x: nx, y: ny });
+                    }
+                }
+            }
+            return false;
+        }
+
+        // 미로 생성 함수
+        function createMaze() {
+            function isSafe(x, y) {
+                return x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && mazeLayout[y][x] === 1;
+            }
+
+            function generatePath(x, y) {
+                mazeLayout[y][x] = 0;
+
+                const directions = [
+                    { dx: 2, dy: 0 },
+                    { dx: -2, dy: 0 },
+                    { dx: 0, dy: 2 },
+                    { dx: 0, dy: -2 }
+                ];
+
+                for (const { dx, dy } of directions.sort(() => Math.random() - 0.5)) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    const mx = x + dx / 2;
+                    const my = y + dy / 2;
+
+                    if (isSafe(nx, ny)) {
+                        mazeLayout[my][mx] = 0;
+                        generatePath(nx, ny);
+                    }
+                }
+            }
+
+            generatePath(startPosition.x, startPosition.y);
+            mazeLayout[endPosition.y][endPosition.x] = 0;
+
+            if (!isReachable(startPosition, endPosition)) {
+                mazeLayout.forEach(row => row.fill(1));
+                createMaze();
+            }
+        }
+
+        createMaze();
+
+        function drawMaze() {
+            const maze = document.getElementById('maze');
+            maze.innerHTML = '';
+            for (let y = 0; y < HEIGHT; y++) {
+                for (let x = 0; x < WIDTH; x++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    if (mazeLayout[y][x] === 1) {
+                        cell.classList.add('wall');
+                    } else if (x === playerPosition.x && y === playerPosition.y) {
+                        cell.classList.add('player');
+                    } else if (x === endPosition.x && y === endPosition.y) {
+                        cell.classList.add('end');
+                    } else if (enemies.some(e => e.x === x && e.y === y)) {
+                        cell.classList.add('enemy');
+                    }
+                    maze.appendChild(cell);
+                }
+            }
+        }
+
+        function movePlayer(direction) {
+            let newX = playerPosition.x;
+            let newY = playerPosition.y;
+
+            switch (direction) {
+                case 'up': newY--; break;
+                case 'down': newY++; break;
+                case 'left': newX--; break;
+                case 'right': newX++; break;
+            }
+
+            if (mazeLayout[newY] && mazeLayout[newY][newX] === 0) {
+                playerPosition.x = newX;
+                playerPosition.y = newY;
+            }
+
+            drawMaze();
+            checkWin();
+            checkCollision();
+        }
+
+        function moveEnemies() {
+            const directions = [
+                { dx: 0, dy: 1 },
+                { dx: 1, dy: 0 },
+                { dx: 0, dy: -1 },
+                { dx: -1, dy: 0 }
+            ];
+
+            enemies.forEach(e => {
+                const possibleMoves = directions.map(d => ({
+                    x: e.x + d.dx,
+                    y: e.y + d.dy
+                })).filter(({ x, y }) => x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && mazeLayout[y][x] === 0);
+
+                if (possibleMoves.length > 0) {
+                    const move = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                    e.x = move.x;
+                    e.y = move.y;
+                }
+            });
+
+            drawMaze();
+        }
+
+        function checkCollision() {
+            if (enemies.some(e => e.x === playerPosition.x && e.y === playerPosition.y)) {
+                setTimeout(() => {
+                    alert('Game Over!');
+                    playerPosition = { ...startPosition };
+                    drawMaze();
+                }, 100);
+            }
+        }
+
+        function checkWin() {
+            if (playerPosition.x === endPosition.x && playerPosition.y === endPosition.y) {
+                setTimeout(() => {
+                    alert('You win!');
+                    playerPosition = { ...startPosition };
+                    drawMaze();
+                }, 100);
+            }
+        }
+
+        function removeEnemiesNearPlayer() {
+            enemies = enemies.filter(e => Math.abs(e.x - playerPosition.x) > 1 || Math.abs(e.y - playerPosition.y) > 1);
+            drawMaze();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp': movePlayer('up'); break;
+                case 'ArrowDown': movePlayer('down'); break;
+                case 'ArrowLeft': movePlayer('left'); break;
+                case 'ArrowRight': movePlayer('right'); break;
+                case ' ': // 스페이스바를 눌렀을 때
+                    removeEnemiesNearPlayer();
+                    break;
+            }
+        });
+
+        let timeLeft = 60;
+        const timerElement = document.getElementById('timer');
+        const timer = setInterval(() => {
+            timeLeft--;
+            timerElement.textContent = `Time Left: ${timeLeft}`;
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                alert('Time is up! Game Over!');
+                playerPosition = { ...startPosition };
+                drawMaze();
+            }
+        }, 1000);
+
+        drawMaze();
+        setInterval(moveEnemies, 2000); // 적이 2초마다 이동하도록 설정
+    </script>
+</body>
+</html>
